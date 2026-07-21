@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Mario Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            color: #58a6ff;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 25px rgba(88, 166, 255, 0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #30363d;
+        }
+
+        canvas {
+            background: linear-gradient(to bottom, #161b22, #0d1117);
+            display: block;
+        }
+
+        .controls-hint {
+            margin-top: 15px;
+            font-size: 15px;
+            color: #8b949e;
+        }
+
+        /* Overlay UI */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(13, 17, 23, 0.92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .overlay h2 {
+            font-size: 34px;
+            margin-bottom: 10px;
+        }
+
+        .overlay p {
+            font-size: 16px;
+            color: #8b949e;
+            max-width: 550px;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            background-color: #238636;
+            color: white;
+            border: none;
+            padding: 14px 35px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .btn:hover {
+            background-color: #2ea043;
+            transform: scale(1.05);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>📡 Master Mario IoT Adventure</h1>
+    
+    <div id="game-container">
+        <canvas id="gameCanvas" width="900" height="450"></canvas>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="overlay">
+            <h2>Build the Ultimate IoT System!</h2>
+            <p>Help Mario collect all <b>8 IoT components</b> across the system before the 60-second timer runs out. Avoid system bugs 👾!</p>
+            <button id="startBtn" class="btn">START ADVENTURE</button>
+        </div>
+
+        <!-- Win/Game Over Screen -->
+        <div id="endScreen" class="overlay hidden">
+            <h2 id="endTitle">CONGRATULATIONS!</h2>
+            <p id="endMessage">You successfully built the IoT network!</p>
+            <button id="restartBtn" class="btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <div class="controls-hint">
+        🎮 <b>Controls:</b> Arrow Keys or A/D to Move | Space / Up Arrow to Jump
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const startScreen = document.getElementById("startScreen");
+        const endScreen = document.getElementById("endScreen");
+        const endTitle = document.getElementById("endTitle");
+        const endMessage = document.getElementById("endMessage");
+        const startBtn = document.getElementById("startBtn");
+        const restartBtn = document.getElementById("restartBtn");
+
+        // تحميل صورة ماريو
+        const marioImg = new Image();
+        marioImg.src = "mario.png";
+
+        let gameState = "MENU";
+        let timer = 60; // 60 ثانية لعب
+        let timerInterval = null;
+        let score = 0;
+
+        // إعدادات ماريو (حركة سهلة وسلسة)
+        const player = {
+            x: 40,
+            y: 350,
+            width: 35,   // عرض صورة ماريو
+            height: 45,  // ارتفاع صورة ماريو
+            vx: 0,
+            vy: 0,
+            speed: 6.5,
+            jumpPower: -12.5,
+            gravity: 0.5,
+            isJumping: false
+        };
+
+        // المنصات
+        const platforms = [
+            { x: 0, y: 410, width: 900, height: 40 }, // Ground
+            { x: 80, y: 330, width: 120, height: 15 },
+            { x: 250, y: 270, width: 130, height: 15 },
+            { x: 430, y: 210, width: 140, height: 15 },
+            { x: 620, y: 270, width: 130, height: 15 },
+            { x: 730, y: 330, width: 130, height: 15 },
+            { x: 180, y: 160, width: 120, height: 15 },
+            { x: 620, y: 160, width: 120, height: 15 }
+        ];
+
+        // 8 أجهزة IoT مجمعة باللعبة
+        let iotItems = [];
+        const initialIotItems = [
+            { x: 110, y: 295, symbol: "📡", name: "Wi-Fi Module" },
+            { x: 290, y: 235, symbol: "📟", name: "Temperature Sensor" },
+            { x: 480, y: 175, symbol: "💡", name: "Smart Actuator" },
+            { x: 660, y: 235, symbol: "🎛️", name: "Microcontroller" },
+            { x: 760, y: 295, symbol: "🔋", name: "LiPo Battery" },
+            { x: 210, y: 125, symbol: "📷", name: "Smart Camera" },
+            { x: 650, y: 125, symbol: "🔒", name: "Security Chip" },
+            { x: 40,  y: 375, symbol: "🌐", name: "IoT Gateway" }
+        ];
+
+        // عوائق بطيئة للتسلية
+        let obstacles = [];
+        const initialObstacles = [
+            { x: 260, y: 250, width: 20, height: 20, vx: 0.8, minX: 250, maxX: 350, symbol: "👾" },
+            { x: 630, y: 250, width: 20, height: 20, vx: 0.8, minX: 620, maxX: 720, symbol: "👾" },
+            { x: 400, y: 390, width: 20, height: 20, vx: 1.0, minX: 250, maxX: 600, symbol: "⚠️" }
+        ];
+
+        const keys = {};
+
+        window.addEventListener("keydown", (e) => keys[e.code] = true);
+        window.addEventListener("keyup", (e) => keys[e.code] = false);
+
+        startBtn.addEventListener("click", startGame);
+        restartBtn.addEventListener("click", startGame);
+
+        function resetGame() {
+            player.x = 40;
+            player.y = 350;
+            player.vx = 0;
+            player.vy = 0;
+            score = 0;
+            timer = 60;
+
+            iotItems = initialIotItems.map(item => ({ ...item, collected: false }));
+            obstacles = JSON.parse(JSON.stringify(initialObstacles));
+        }
+
+        function startGame() {
+            resetGame();
+            gameState = "PLAYING";
+            startScreen.classList.add("hidden");
+            endScreen.classList.add("hidden");
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (gameState === "PLAYING") {
+                    timer--;
+                    if (timer <= 0) {
+                        gameOver(false);
+                    }
+                }
+            }, 1000);
+        }
+
+        function gameOver(isWin) {
+            gameState = isWin ? "WIN" : "GAMEOVER";
+            clearInterval(timerInterval);
+
+            if (isWin) {
+                endTitle.innerText = "🎉 CONGRATULATIONS!";
+                endTitle.style.color = "#2ea043";
+                endMessage.innerHTML = `Awesome Job! Mario successfully collected all <b>8 IoT devices</b> and deployed the smart system with <b>${timer} seconds</b> left on the clock!`;
+            } else {
+                endTitle.innerText = "💥 SYSTEM FAILURE!";
+                endTitle.style.color = "#f85149";
+                endMessage.innerText = timer <= 0 ? "Time's up! The network deployment failed." : "Oops! Mario hit a system threat/bug. Try again!";
+            }
+
+            endScreen.classList.remove("hidden");
+        }
+
+        function update() {
+            if (gameState !== "PLAYING") return;
+
+            // Movement
+            if (keys["ArrowRight"] || keys["KeyD"]) player.vx = player.speed;
+            else if (keys["ArrowLeft"] || keys["KeyA"]) player.vx = -player.speed;
+            else player.vx = 0;
+
+            if ((keys["ArrowUp"] || keys["Space"] || keys["KeyW"]) && !player.isJumping) {
+                player.vy = player.jumpPower;
+                player.isJumping = true;
+            }
+
+            player.vy += player.gravity;
+            player.x += player.vx;
+            player.y += player.vy;
+
+            // Boundaries
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // Platforms
+            player.isJumping = true;
+            platforms.forEach(p => {
+                if (
+                    player.x < p.x + p.width &&
+                    player.x + player.width > p.x &&
+                    player.y + player.height >= p.y &&
+                    player.y + player.height <= p.y + p.height + player.vy
+                ) {
+                    player.y = p.y - player.height;
+                    player.vy = 0;
+                    player.isJumping = false;
+                }
+            });
+
+            // Obstacles
+            obstacles.forEach(obs => {
+                obs.x += obs.vx;
+                if (obs.x <= obs.minX || obs.x >= obs.maxX) {
+                    obs.vx *= -1;
+                }
+
+                if (
+                    player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y
+                ) {
+                    gameOver(false);
+                }
+            });
+
+            // IoT Item Collection
+            let collectedCount = 0;
+            iotItems.forEach(item => {
+                if (!item.collected) {
+                    if (
+                        player.x < item.x + 22 &&
+                        player.x + player.width > item.x &&
+                        player.y < item.y + 22 &&
+                        player.y + player.height > item.y
+                    ) {
+                        item.collected = true;
+                        score += 10;
+                    }
+                } else {
+                    collectedCount++;
+                }
+            });
+
+            // Check Win
+            if (collectedCount === iotItems.length) {
+                gameOver(true);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Platforms
+            ctx.fillStyle = "#21262d";
+            platforms.forEach(p => {
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+                ctx.strokeStyle = "#30363d";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(p.x, p.y, p.width, p.height);
+            });
+
+            // Draw IoT Items
+            ctx.font = "22px Arial";
+            iotItems.forEach(item => {
+                if (!item.collected) {
+                    ctx.fillText(item.symbol, item.x, item.y);
+                }
+            });
+
+            // Draw Obstacles
+            obstacles.forEach(obs => {
+                ctx.fillText(obs.symbol, obs.x, obs.y + 15);
+            });
+
+            // Draw Player (رسم صورة ماريو)
+            ctx.drawImage(marioImg, player.x, player.y, player.width, player.height);
+
+            // Draw HUD Info
+            ctx.fillStyle = "#c9d1d9";
+            ctx.font = "bold 16px 'Segoe UI', Tahoma";
+            ctx.fillText(`📡 Devices Collected: ${score / 10} / ${iotItems.length}`, 25, 35);
+
+            // Timer Display
+            ctx.fillStyle = timer <= 15 ? "#f85149" : "#2ea043";
+            ctx.font = "bold 18px 'Segoe UI', Tahoma";
+            ctx.fillText(`⏱️ Time Remaining: ${timer}s`, 700, 35);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
